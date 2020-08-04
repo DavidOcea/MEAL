@@ -45,7 +45,8 @@ def init_params(net):
                 init.constant(m.bias, 0)
 
 
-_, term_width = os.popen('stty size', 'r').read().split()
+# _, term_width = os.popen('stty size', 'r').read().split()
+term_width = 171
 term_width = int(term_width)
 
 TOTAL_BAR_LENGTH = 65.
@@ -132,13 +133,21 @@ def get_model(args, config, device):
 
     model_map = {"vgg19": VGG, "vgg19_BN": VGG, "resnet18": ResNet18, 'preactresnet18': PreActResNet18,
                  "googlenet": GoogLeNet, "densenet121": DenseNet121,"densenet_cifar": densenet_cifar,
-                 "resnext": ResNeXt29_2x64d, "mobilenet": MobileNet, "dpn92": DPN92}
+                 "resnext": ResNeXt29_2x64d, "mobilenet": MobileNet, "dpn92": DPN92, "mul_mult_prun8_gpu":'mult_prun8_gpu',
+                 "mul_mult_prun8_gpu_prun":'mult_prun8_gpu_prun','mul_multnas5_gpu':'multnas5_gpu',
+                 'mul_multnas5_gpu_prun':'multnas5_gpu_prun','mul_multnas5_gpu_2_18':'multnas5_gpu_2_18'}
 
     # Add teachers models into teacher model list
     for t in args.teachers:
         if t in model_map:
-            net = model_map[t](args)
-            net.__name__ = t
+            if "mul" not in t:
+                net = model_map[t](args)
+                net.__name__ = t
+            else:
+                net = MultiTaskWithLoss(backbone=t[4:],
+                                    num_classes=args.num_classes, 
+                                    feature_dim=args.feature_dim)
+                net.__name__ = t
             teachers.append(net)
 
     assert len(teachers) > 0, "teachers must be in %s" % " ".join(model_map.keys)
@@ -146,7 +155,13 @@ def get_model(args, config, device):
     # Initialize student model
 
     assert args.student in model_map, "students must be in %s" % " ".join(model_map.keys)
-    student = model_map[args.student](args)
+    if "mul" not in args.student:
+        student = model_map[args.student](args)
+    else:
+        
+        student = MultiTaskWithLoss(backbone=args.student[4:],
+                                num_classes=args.num_classes, 
+                                feature_dim=args.feature_dim)
 
     # Model setup
 
@@ -164,18 +179,47 @@ def get_model(args, config, device):
     # Load parameters in teacher models
     for teacher in teachers:
         if teacher.__name__ != "shake_shake":
-            checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/models/checkpoint/%s/ckpt.t7' % teacher.__name__)
-            model_dict = teacher.state_dict()
-            pretrained_dict = {k: v for k, v in checkpoint['net'].items() if k in model_dict}
-            model_dict.update(pretrained_dict)
-            teacher.load_state_dict(model_dict)
-            print("teacher %s acc: ", (teacher.__name__, checkpoint['acc']))
+            if teacher.__name__ == 'mul_mult_prun8_gpu':
+                checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/vehicleattributes/ckpts/mult_prun8_gpu/2020/0713ckpt_epoch_47.pth.tar')
+            elif teacher.__name__ == 'mul_multnas5_gpu':
+                checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/vehicleattributes/ckpts/multnas5_gpu/2020/matrix/0710ckpt_epoch_38.pth.tar')
+            elif teacher.__name__ == 'mul_multnas5_gpu_2_18':
+                checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/vehicleattributes/ckpts/multnas5_gpu_2/2020/0719ckpt_epoch_45.pth.tar')
+            #原生的
+            # model_dict = teacher.state_dict()
+            # pretrained_dict = {k: v for k, v in checkpoint.items() if k in model_dict}
+            # model_dict.update(pretrained_dict)
+            
+            #修改后的load
+            state_dict = checkpoint['state_dict']
+            # from collections import OrderedDict
+            # new_state_dict = OrderedDict()
+            # for k, v in state_dict.items():
+            #     head = k[:7]
+            #     if head == 'module.':
+            #         name = k[7:]  # remove `module.`
+            #     else:
+            #         name = k
+		        # name = 'module.{}'.format(k)
+                # new_state_dict[name] = v
+
+            teacher.load_state_dict(state_dict) #model_dict
+            # print("teacher %s acc: ", (teacher.__name__, checkpoint['acc']))
+        
+        #--原来的--
+        # if teacher.__name__ != "shake_shake":
+        #     checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/models/checkpoint/%s/ckpt.t7' % teacher.__name__)
+        #     model_dict = teacher.state_dict()
+        #     pretrained_dict = {k: v for k, v in checkpoint['net'].items() if k in model_dict}
+        #     model_dict.update(pretrained_dict)
+        #     teacher.load_state_dict(model_dict)
+        #     print("teacher %s acc: ", (teacher.__name__, checkpoint['acc']))
 
     student = student.to(device)
-    if device == "cuda":
-        out_dims = student.out_dims
-        student = torch.nn.DataParallel(student)
-        student.out_dims = out_dims
+    # if device == "cuda":
+    #     out_dims = student.out_dims
+    #     student = torch.nn.DataParallel(student)
+    #     student.out_dims = out_dims
 
     if args.teacher_eval:
         for teacher in teachers:

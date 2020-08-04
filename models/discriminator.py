@@ -15,7 +15,7 @@ def grad_reverse(x):
     return GradReverse()(x)
 
 class Discriminator(nn.Module):
-    def __init__(self, outputs_size, K = 2):
+    def __init__(self, outputs_size, K = 1): #2
         super(Discriminator, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=outputs_size, out_channels=outputs_size//K, kernel_size=1, stride=1, bias=True)
         outputs_size = outputs_size // K

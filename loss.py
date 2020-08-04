@@ -43,6 +43,7 @@ class discriminatorLoss(nn.Module):
         self.loss = loss
 
     def forward(self, outputs, targets):
+        
         inputs = [torch.cat((i,j),0) for i, j in zip(outputs, targets)]
         batch_size = inputs[0].size(0)
         target = torch.FloatTensor([[1, 0] for _ in range(batch_size//2)] + [[0, 1] for _ in range(batch_size//2)])

@@ -19,8 +19,15 @@ import numpy as np
 
 from models import *
 from models import discriminator
-from utils import progress_bar, get_model
+from utils2muilt import progress_bar, get_model
 from loss import *
+
+from torch.utils.data import DataLoader
+from data.transforms import RandomResizedCrop, Compose, Resize, CenterCrop, ToTensor, \
+    Normalize, RandomHorizontalFlip, ColorJitter, Lighting
+from data.datasets import GivenSizeSampler, FileListLabeledDataset, FileListDataset
+from torch.autograd import Variable
+from optimizer import adjust_learning_rate
 
 # ================= Arugments ================ #
 
@@ -116,33 +123,88 @@ start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 # ================= Data Loader ================ #
 
 print('==> Preparing data..')
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
 
-transform_test = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
+args.data_root = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/CX_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TK_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/ZR_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TX_20200616',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709']
 
-trainset = torchvision.datasets.CIFAR10(root='/workspace/mnt/storage/yangdecheng/yangdecheng/data/test_data', train=True, download=True, transform=transform_train)
+args.data_root_val = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/CX_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TK_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/ZR_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TX_20200616',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709']
 
-if args.student == "densenet_cifar":
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=32, shuffle=True, num_workers=2)
-    print("batch_size =", 64)
+args.train_data_list = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/CX_20200709/txt/cx_train.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TK_20200709/txt/tk_train.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/ZR_20200709/txt/zr_train.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TX_20200616/txt/tx_train.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709/txt/wm_train.txt']
 
-else:
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+args.val_data_list = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/CX_20200709/txt/cx_val.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TK_20200709/txt/tk_val.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/ZR_20200709/txt/zr_val.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TX_20200616/txt/tx_val.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709/txt/wm_val.txt']
 
-testset = torchvision.datasets.CIFAR10(root='/workspace/mnt/storage/yangdecheng/yangdecheng/data/test_data', train=False, download=True, transform=transform_test)
-testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+args.backends = 'mult_prun8_gpu'
+args.feature_dim = 18
+args.batchSize = [args.batch_size,args.batch_size,args.batch_size,args.batch_size,args.batch_size]
+args.ngpu = 1
 
-classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+num_tasks = len(args.data_root)
 
-optim_config['steps_per_epoch'] = len(trainloader)
+trainset = []
+for i in range(num_tasks): 
+    if i == 1:
+        trainset.append(FileListLabeledDataset(
+    args.train_data_list[i], args.data_root[i],
+    Compose([
+    RandomResizedCrop(112,scale=(0.94, 1.), ratio=(1. / 4., 4. / 1.)), #scale=(0.7, 1.2), ratio=(1. / 1., 4. / 1.)
+    RandomHorizontalFlip(),
+    ColorJitter(brightness=[0.5,1.5], contrast=[0.5,1.5], saturation=[0.5,1.5], hue= 0),
+    ToTensor(),
+    Lighting(1, [0.2175, 0.0188, 0.0045], [[-0.5675,  0.7192,  0.4009], [-0.5808, -0.0045, -0.8140], [-0.5836, -0.6948,  0.4203]]),
+    Normalize([0.406, 0.456, 0.485], [0.225, 0.224, 0.229]),])))
+    else:
+        trainset.append(FileListLabeledDataset(
+    args.train_data_list[i], args.data_root[i],
+    Compose([
+    RandomResizedCrop(112,scale=(0.7, 1.2), ratio=(1. / 1., 4. / 1.)),
+    RandomHorizontalFlip(),
+    ColorJitter(brightness=[0.5,1.5], contrast=[0.5,1.5], saturation=[0.5,1.5], hue= 0),
+    ToTensor(),
+    Lighting(1, [0.2175, 0.0188, 0.0045], [[-0.5675,  0.7192,  0.4009], [-0.5808, -0.0045, -0.8140], [-0.5836, -0.6948,  0.4203]]),
+    Normalize([0.406, 0.456, 0.485], [0.225, 0.224, 0.229]),])))
+
+args.num_classes = [td.num_class for td in trainset]
+train_longest_size = max([int(np.ceil(len(td) / float(bs))) for td, bs in zip(trainset, args.batchSize)])
+train_sampler = [GivenSizeSampler(td, total_size=train_longest_size * bs, rand_seed=0) for td, bs in zip(trainset, args.batchSize)]
+trainloader = [DataLoader(
+                            trainset[k], 
+                            batch_size=args.batchSize[k], 
+                            shuffle=False,
+                            num_workers=8, 
+                            pin_memory=False, sampler=train_sampler[k]) for k in range(num_tasks)]
+
+testset = [FileListLabeledDataset(
+                args.val_data_list[i], args.data_root_val[i],
+                Compose([
+                 Resize((112,112)),
+                ToTensor(),
+                Normalize([0.406, 0.456, 0.485], [0.225, 0.224, 0.229]),]),) for i in range(num_tasks)]
+
+test_longest_size = max([int(np.ceil(len(td) / float(bs))) for td, bs in zip(testset, args.batchSize)])
+test_sampler = [GivenSizeSampler(td, total_size=test_longest_size * bs, rand_seed=0) for td, bs in zip(testset, args.batchSize)]
+testloader = [DataLoader(
+                    testset[k], 
+                    batch_size=args.batchSize[k], 
+                    shuffle=False,
+                    num_workers=8, 
+                    pin_memory=False,sampler=test_sampler[k]) for k in range(num_tasks)]
+
+optim_config['steps_per_epoch'] = max([len(trainloader[k]) for k in range(num_tasks)])
 
 # ================= Model Setup ================ #
 
@@ -157,7 +219,8 @@ teachers, student = get_model(args, config, device="cuda")
 print("==> Teacher(s): ", " ".join([teacher.__name__ for teacher in teachers]))
 print("==> Student: ", args.student)
 
-dims = [student.out_dims[i] for i in eval(args.out_layer)]
+# dims = [student.out_dims[i] for i in eval(args.out_layer)]
+dims = [5,3,2,2,7]
 print("dims:", dims)
 
 update_parameters = [{'params': student.parameters()}]
@@ -172,13 +235,30 @@ if args.adv:
 
 print(args)
 
+args.resume = 1
 if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/models/checkpoint/%s-generator/ckpt.t7' % "_".join(args.teachers))
-    student.load_state_dict(checkpoint['net'])
-    start_epoch = checkpoint['epoch']
+    if args.student == 'mul_mult_prun8_gpu_prun':
+        checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/Taylor_pruning/Tools/models/purn_20200717_5T_t_20e.pth.tar')
+    elif args.student == 'mul_multnas5_gpu_prun':
+        checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/Taylor_pruning/Tools/models/purn_20200717_5T_t2_20e.pth.tar')
+    state_dict = checkpoint['state_dict']
+    from collections import OrderedDict
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        head = k[:7]
+        if 'gate' in k:
+            continue
+        if head == 'module.':
+            name = k[7:]  # remove `module.`
+        else:
+            name = k
+		# name = 'module.{}'.format(k)
+        new_state_dict[name] = v
+    student.load_state_dict(new_state_dict) #,strict=False
+    # start_epoch = checkpoint['epoch']
 
 # ================= Loss Function for Generator ================ #
 
@@ -213,7 +293,7 @@ elif args.student == "mobilenet":
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150 * min(1, len(teachers)), 250 * min(1, (len(teachers)))],gamma=0.1)
 else:
     optimizer = optim.SGD(update_parameters, lr=args.lr, momentum=0.9, weight_decay=5e-4)  # nesterov = True, weight_decay = 1e-4，stage = 3, batch_size = 64
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150 * min(1, len(teachers)), 250 * min(1, (len(teachers)))],gamma=0.1)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30,40,50],gamma=0.1)
 
 # ================= Training and Testing ================ #
 
@@ -232,10 +312,33 @@ def train(epoch):
     correct = 0
     total = 0
     discriminator_loss = 0
+    
+    for batch_idx, all_in in enumerate(zip(*tuple(trainloader))):
+        # adjust_learning_rate(optimizer, epoch, args.epochs, args.lr)
+        input, target = zip(*[all_in[k] for k in range(num_tasks)])
+        slice_pt = 0
+        slice_idx = [0]
+        for l in [p.size(0) for p in input]:
+            slice_pt += l // args.ngpu
+            slice_idx.append(slice_pt)
+        organized_input = []
+        organized_target = []
+        for ng in range(args.ngpu):
+            for t in range(len(input)):
+                bs = args.batchSize[t] // args.ngpu
+                organized_input.append(input[t][ng * bs : (ng + 1) * bs, ...])
+                organized_target.append(target[t][ng * bs : (ng + 1) * bs, ...])
 
-    for batch_idx, (inputs, targets) in enumerate(trainloader):
+        input = torch.cat(organized_input, dim=0)
+        target = torch.cat(organized_target, dim=0)
+
+        # measure data loading time
+        inputs = Variable(input.cuda(),requires_grad=False)
+        targets = Variable(target.cuda(),requires_grad=False)
+    
+    # for batch_idx, (inputs, targets) in enumerate(trainloader):
         total += targets.size(0)
-        inputs, targets = inputs.to(device), targets.to(device)
+        # inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
 
         # Get output from student model
@@ -245,12 +348,13 @@ def train(epoch):
         # Get output from teacher model
         answers = teacher(inputs)
         # Select output from student and teacher
+
         outputs, answers = output_selector(outputs, answers, eval(args.out_layer))
         # Calculate loss between student and teacher
-        import pdb
-        pdb.set_trace()
+        
         loss = criterion(outputs, answers)
         # Calculate loss for discriminators
+        
         d_loss = discriminators_criterion(outputs, answers)
         # Get total loss
         total_loss = loss + d_loss
@@ -260,10 +364,13 @@ def train(epoch):
 
         train_loss += loss.item()
         discriminator_loss += d_loss.item()
-        _, predicted = outputs[-1].max(1)
-        correct += predicted.eq(targets).sum().item()
+        for k in range(num_tasks):
+            _, predicted = outputs[k].max(1)
+            sl1 = k*args.batch_size
+            sl2 = (k+1)*args.batch_size
+            correct += predicted[sl1:sl2].eq(targets[sl1:sl2]).sum().item()
 
-        progress_bar(batch_idx, len(trainloader), 'Teacher: %s | Lr: %.4e | G_Loss: %.3f | D_Loss: %.3f | Acc: %.3f%% (%d/%d)'
+        print(batch_idx, len(trainloader), 'Teacher: %s | Lr: %.4e | G_Loss: %.3f | D_Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (teacher.__name__, scheduler.get_lr()[0], train_loss / (batch_idx + 1), discriminator_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
 
@@ -275,7 +382,31 @@ def test(epoch):
     total = 0
     discriminator_loss = 0
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(testloader):
+        
+        for batch_idx, all_in in enumerate(zip(*tuple(testloader))):
+            input, target = zip(*[all_in[k] for k in range(num_tasks)])
+            slice_pt = 0
+            slice_idx = [0]
+            for l in [p.size(0) for p in input]:
+                slice_pt += l // args.ngpu
+                slice_idx.append(slice_pt)
+            organized_input = []
+            organized_target = []
+            for ng in range(args.ngpu):
+                for t in range(len(input)):
+                    bs = args.batchSize[t] // args.ngpu
+                    organized_input.append(input[t][ng * bs : (ng + 1) * bs, ...])
+                    organized_target.append(target[t][ng * bs : (ng + 1) * bs, ...])
+
+            input = torch.cat(organized_input, dim=0)
+            target = torch.cat(organized_target, dim=0)
+
+            # measure data loading time
+            inputs = Variable(input.cuda(),requires_grad=False)
+            targets = Variable(target.cuda(),requires_grad=False)
+
+        
+        # for batch_idx, (inputs, targets) in enumerate(testloader):
             total += targets.size(0)
             inputs, targets = inputs.to(device), targets.to(device)
 
@@ -294,10 +425,15 @@ def test(epoch):
 
             test_loss += loss.item()
             discriminator_loss += d_loss.item()
-            _, predicted = outputs[-1].max(1)
-            correct += predicted.eq(targets).sum().item()
+            # _, predicted = outputs[-1].max(1)
+            # correct += predicted.eq(targets).sum().item()
+            for k in range(num_tasks):
+                _, predicted = outputs[k].max(1)
+                sl1 = k*args.batch_size
+                sl2 = (k+1)*args.batch_size
+                correct += predicted[sl1:sl2].eq(targets[sl1:sl2]).sum().item()
 
-            progress_bar(batch_idx, len(testloader), 'Lr: %.4e | G_Loss: %.3f | D_Loss: %.3f | Acc: %.3f%% (%d/%d)'
+            print(batch_idx, len(testloader), 'Lr: %.4e | G_Loss: %.3f | D_Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 % (scheduler.get_lr()[0], test_loss / (batch_idx + 1), discriminator_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
         best_acc = max(100. * correct / total, best_acc)
@@ -306,7 +442,7 @@ def test(epoch):
     if epoch % 10 == 0 and best_acc == (100. * correct / total):
         print('Saving..')
         state = {
-            'net': student.state_dict(),
+            'state_dict': student.state_dict(),
             'epoch': epoch,
         }
         if not os.path.isdir('checkpoint'):
@@ -320,6 +456,13 @@ def test(epoch):
             os.mkdir(FILE_PATH)
         save_name = './checkpoint' + '/' + "_".join(args.teachers) + '-generator/ckpt.t7'
         torch.save(state, save_name)
+    if epoch % 4 == 0:
+        states = {
+                'epoch': epoch,
+                'state_dict': student.state_dict(),
+            }
+        paths = './checkpoint' + '/' + "_".join(args.teachers) + '-generator/'
+        torch.save(states, '{}/{}.pth.tar'.format(paths, epoch))
 
 for epoch in range(start_epoch, start_epoch+args.epochs*(len(teachers))):
     train(epoch)
