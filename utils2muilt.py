@@ -135,7 +135,8 @@ def get_model(args, config, device):
                  "googlenet": GoogLeNet, "densenet121": DenseNet121,"densenet_cifar": densenet_cifar,
                  "resnext": ResNeXt29_2x64d, "mobilenet": MobileNet, "dpn92": DPN92, "mul_mult_prun8_gpu":'mult_prun8_gpu',
                  "mul_mult_prun8_gpu_prun":'mult_prun8_gpu_prun','mul_multnas5_gpu':'multnas5_gpu',
-                 'mul_multnas5_gpu_prun':'multnas5_gpu_prun','mul_multnas5_gpu_2_18':'multnas5_gpu_2_18'}
+                 'mul_multnas5_gpu_prun':'multnas5_gpu_prun','mul_multnas5_gpu_2_18':'multnas5_gpu_2_18',
+                 'mul_se_resnext101_32x4d':'se_resnext101_32x4d'}
 
     # Add teachers models into teacher model list
     for t in args.teachers:
@@ -180,11 +181,13 @@ def get_model(args, config, device):
     for teacher in teachers:
         if teacher.__name__ != "shake_shake":
             if teacher.__name__ == 'mul_mult_prun8_gpu':
-                checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/vehicleattributes/ckpts/mult_prun8_gpu/2020/0713ckpt_epoch_47.pth.tar')
+                checkpoint = torch.load('./pretrain_models/0713ckpt_epoch_47.pth.tar')
             elif teacher.__name__ == 'mul_multnas5_gpu':
-                checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/vehicleattributes/ckpts/multnas5_gpu/2020/matrix/0710ckpt_epoch_38.pth.tar')
+                checkpoint = torch.load('./pretrain_models/0710ckpt_epoch_38.pth.tar')
             elif teacher.__name__ == 'mul_multnas5_gpu_2_18':
-                checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/vehicleattributes/ckpts/multnas5_gpu_2/2020/0719ckpt_epoch_45.pth.tar')
+                checkpoint = torch.load('./pretrain_models/0719ckpt_epoch_45.pth.tar')
+            elif teacher.__name__ == 'mul_se_resnext101_32x4d':
+                checkpoint = torch.load('./pretrain_models/0805_se_res101_51.pth.tar')
             #原生的
             # model_dict = teacher.state_dict()
             # pretrained_dict = {k: v for k, v in checkpoint.items() if k in model_dict}
@@ -192,17 +195,18 @@ def get_model(args, config, device):
             
             #修改后的load
             state_dict = checkpoint['state_dict']
-            # from collections import OrderedDict
-            # new_state_dict = OrderedDict()
-            # for k, v in state_dict.items():
-            #     head = k[:7]
-            #     if head == 'module.':
-            #         name = k[7:]  # remove `module.`
-            #     else:
-            #         name = k
+            from collections import OrderedDict
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                # head = k[:7]
+                if 'last_linear' in k:
+                    continue  # remove `module.`
+                else:
+                    name = k
 		        # name = 'module.{}'.format(k)
-                # new_state_dict[name] = v
-
+                new_state_dict[name] = v
+            state_dict = new_state_dict
+        
             teacher.load_state_dict(state_dict) #model_dict
             # print("teacher %s acc: ", (teacher.__name__, checkpoint['acc']))
         
@@ -216,9 +220,9 @@ def get_model(args, config, device):
         #     print("teacher %s acc: ", (teacher.__name__, checkpoint['acc']))
 
     student = student.to(device)
-    # if device == "cuda":
+    if device == "cuda":
     #     out_dims = student.out_dims
-    #     student = torch.nn.DataParallel(student)
+        student = torch.nn.DataParallel(student)
     #     student.out_dims = out_dims
 
     if args.teacher_eval:

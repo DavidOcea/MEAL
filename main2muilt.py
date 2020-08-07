@@ -124,29 +124,29 @@ start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 print('==> Preparing data..')
 
-args.data_root = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/CX_20200709',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TK_20200709',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/ZR_20200709',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TX_20200616',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709']
+args.data_root = ['/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/CX_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TK_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/ZR_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TX_20200616',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/WM_20200709']
 
-args.data_root_val = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/CX_20200709',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TK_20200709',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/ZR_20200709',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TX_20200616',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709']
+args.data_root_val = ['/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/CX_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TK_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/ZR_20200709',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TX_20200616',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/WM_20200709']
 
-args.train_data_list = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/CX_20200709/txt/cx_train.txt',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TK_20200709/txt/tk_train.txt',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/ZR_20200709/txt/zr_train.txt',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TX_20200616/txt/tx_train.txt',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709/txt/wm_train.txt']
+args.train_data_list = ['/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/CX_20200709/txt/cx_train.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TK_20200709/txt/tk_train.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/ZR_20200709/txt/zr_train.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TX_20200616/txt/tx_train.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/WM_20200709/txt/wm_train.txt']
 
-args.val_data_list = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/CX_20200709/txt/cx_val.txt',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TK_20200709/txt/tk_val.txt',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/ZR_20200709/txt/zr_val.txt',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/TX_20200616/txt/tx_val.txt',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709/txt/wm_val.txt']
+args.val_data_list = ['/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/CX_20200709/txt/cx_val.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TK_20200709/txt/tk_val.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/ZR_20200709/txt/zr_val.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TX_20200616/txt/tx_val.txt',\
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/WM_20200709/txt/wm_val.txt']
 
 args.backends = 'mult_prun8_gpu'
 args.feature_dim = 18
@@ -241,9 +241,9 @@ if args.resume:
     print('==> Resuming from checkpoint..')
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
     if args.student == 'mul_mult_prun8_gpu_prun':
-        checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/Taylor_pruning/Tools/models/purn_20200717_5T_t_20e.pth.tar')
+        checkpoint = torch.load('./pretrain_models/purn_20200717_5T_t_20e.pth.tar')
     elif args.student == 'mul_multnas5_gpu_prun':
-        checkpoint = torch.load('/workspace/mnt/storage/yangdecheng/yangdecheng/work/Taylor_pruning/Tools/models/purn_20200717_5T_t2_20e.pth.tar')
+        checkpoint = torch.load('./pretrain_models/purn_20200717_5T_t2_20e.pth.tar')
     state_dict = checkpoint['state_dict']
     from collections import OrderedDict
     new_state_dict = OrderedDict()
@@ -251,8 +251,8 @@ if args.resume:
         head = k[:7]
         if 'gate' in k:
             continue
-        if head == 'module.':
-            name = k[7:]  # remove `module.`
+        # if head == 'module.':
+        #     name = k[7:]  # remove `module.`
         else:
             name = k
 		# name = 'module.{}'.format(k)
@@ -293,7 +293,7 @@ elif args.student == "mobilenet":
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150 * min(1, len(teachers)), 250 * min(1, (len(teachers)))],gamma=0.1)
 else:
     optimizer = optim.SGD(update_parameters, lr=args.lr, momentum=0.9, weight_decay=5e-4)  # nesterov = True, weight_decay = 1e-4，stage = 3, batch_size = 64
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30,40,50],gamma=0.1)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30,40,50],gamma=0.1) #学习率变化
 
 # ================= Training and Testing ================ #
 
