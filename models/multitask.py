@@ -2,6 +2,7 @@ import torch.nn as nn
 from . import backbones
 import numpy as np
 import torch
+from .label_smoothing import LSR
 
 class SpatialAttention(nn.Module):
     def __init__(self, kernel_size=7):
@@ -43,78 +44,20 @@ class MultiTaskWithLoss(nn.Module):
     def __init__(self, backbone, num_classes, feature_dim, criterion=None):
         super(MultiTaskWithLoss, self).__init__()
         self.basemodel = backbones.__dict__[backbone]()
-        self.criterion = criterion
+        self.criterion = LSR()
         self.num_tasks = len(num_classes)
-        #普通
         self.fcs = nn.ModuleList([nn.Linear(feature_dim, num_classes[k]) for k in range(self.num_tasks)])
-        
-        # 第一任务加空间注意力  --  要注意backbone里要去掉avg_pooling及之后的层，都搬到外面来
-        # self.global_avg_pooling = nn.AdaptiveAvgPool2d(1)
-        # self.ca = ChannelAttention(feature_dim)
-        # self.sa = SpatialAttention()
-        # self.fcs = nn.ModuleList()
-        # for k in range(self.num_tasks):
-        #     # if k == 1:
-        #     # self.fcs.append(nn.Sequential(self.sa,nn.Linear(feature_dim, num_classes[k]))) #sa
-        #     self.fcs.append(nn.Sequential(self.ca,self.sa,nn.Linear(feature_dim, num_classes[k])))
-            # else:
-                # self.fcs.append(nn.Linear(feature_dim, num_classes[k]))
-        self.layers = nn.AdaptiveMaxPool1d(10)
             
     def forward(self,input,target=None,slice_idx=None,eval_mode=False,mixup_criterion=None,mixup_data=None, mix_alpha=None):
-
-        # if mix_alpha is not None:
-        #     inputs = [input[slice_idx[k]:slice_idx[k+1]] for k in range(self.num_tasks)]
-        #     target_slice = [target[slice_idx[k]:slice_idx[k+1]] for k in range(self.num_tasks)]
-        #     mix_data = [mixup_data(ins,tag,mix_alpha, True) for ins,tag in zip(inputs,target_slice)]
-        #     m_feture = [self.basemodel(ins[0]) for ins in mix_data]
-        #     #普通
-        #     y_p = [self.fcs[k](m_feture[k]) for k in range(self.num_tasks)]
-            
-        #     # 第一任务加空间注意力
-        #     # y_p = []
-        #     # for k in range(self.num_tasks):
-        #     #     if k == 0:
-        #     #         # y_p.append(self.fcs[k][1](torch.flatten(self.global_avg_pooling(self.fcs[k][0](m_feture[k])*m_feture[k]), start_dim=1, end_dim=-1))) #sa
-        #     #         y_p.append(self.fcs[k][2](torch.flatten(self.global_avg_pooling(self.fcs[k][1](self.fcs[k][0](m_feture[k])*m_feture[k])*(self.fcs[k][0](m_feture[k])*m_feture[k])), start_dim=1, end_dim=-1)))
-        #     #     else:
-        #     #         y_p.append(self.fcs[k](torch.flatten(self.global_avg_pooling(m_feture[k]), start_dim=1, end_dim=-1)))
-
-        #     return [mixup_criterion(self.criterion,xx,md[1],md[2],md[3]) for xx, md in zip(y_p, mix_data)]
-
-        # else:
         feature_maps = []
         feature = self.basemodel(input)
-            # if eval_mode:
-            #     #普通
-            #     x = [self.fcs[k](feature) for k in range(self.num_tasks)]
-
-            #     # 第一任务加空间注意力
-            #     # x = []
-            #     # for k in range(self.num_tasks):
-            #     #     # if k == 1:
-            #     #     # x.append(self.fcs[k][1](torch.flatten(self.global_avg_pooling(self.fcs[k][0](feature)*feature), start_dim=1, end_dim=-1))) #sa
-            #     #     x.append(self.fcs[k][2](torch.flatten(self.global_avg_pooling(self.fcs[k][1](self.fcs[k][0](feature)*feature)*(self.fcs[k][0](feature)*feature)), start_dim=1, end_dim=-1)))
-            #     #     else:
-            #     #         x.append(self.fcs[k](torch.flatten(self.global_avg_pooling(feature), start_dim=1, end_dim=-1)))
-
-            #     return x
-            # else:
-            #     #普通
-            #     x = [self.fcs[k](feature[slice_idx[k]:slice_idx[k+1], ...]) for k in range(self.num_tasks)] 
-                
-            #     # 第一任务加空间注意力
-            #     # x = []
-            #     # for k in range(self.num_tasks):
-            #     #     # if k == 1:
-            #     #     # x.append(self.fcs[k][1](torch.flatten(self.global_avg_pooling(self.fcs[k][0](feature[slice_idx[k]:slice_idx[k+1], ...])*feature[slice_idx[k]:slice_idx[k+1], ...]), start_dim=1, end_dim=-1))) #sa
-            #     #     x.append(self.fcs[k][2](torch.flatten(self.global_avg_pooling(self.fcs[k][1](self.fcs[k][0](feature[slice_idx[k]:slice_idx[k+1], ...])*feature[slice_idx[k]:slice_idx[k+1], ...])*(self.fcs[k][0](feature[slice_idx[k]:slice_idx[k+1], ...])*feature[slice_idx[k]:slice_idx[k+1], ...])), start_dim=1, end_dim=-1)))
-            #     #     else:
-            #     #         x.append(self.fcs[k](torch.flatten(self.global_avg_pooling(feature[slice_idx[k]:slice_idx[k+1], ...]), start_dim=1, end_dim=-1)))
-    
-            #     target_slice = [target[slice_idx[k]:slice_idx[k+1]] for k in range(self.num_tasks)]
-            #     return [self.criterion(xx, tg) for xx, tg in zip(x, target_slice)]
         out = [self.fcs[k](feature) for k in range(self.num_tasks)]
-        # out = [out[k].view(out[k].size(0), -1) for k in range(self.num_tasks)]
-        return out
-        # return [feature_maps.append(self.layers(out[k].view(out[k].size(0), -1))) for k in range(self.num_tasks)]
+        
+        if slice_idx is not None:
+            x = [self.fcs[k](feature[slice_idx[k]:slice_idx[k+1], ...]) for k in range(self.num_tasks)] 
+            target_slice = [target[slice_idx[k]:slice_idx[k+1]] for k in range(self.num_tasks)]
+            los = [self.criterion(xx, tg) for xx, tg in zip(x, target_slice)]
+        else:
+            los = 0.0
+
+        return out,los

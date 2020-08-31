@@ -60,13 +60,14 @@ parser.add_argument('--seed', type=int, default=17)
 parser.add_argument('--num_workers', type=int, default=7)
 
 # optim config
-parser.add_argument('--epochs', type=int, default=1800)
+parser.add_argument('--epochs', type=int, default=60)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--base_lr', type=float, default=0.2)
 parser.add_argument('--weight_decay', type=float, default=1e-4)
 parser.add_argument('--momentum', type=float, default=0.9)
 parser.add_argument('--nesterov', type=bool, default=True)
 parser.add_argument('--lr_min', type=float, default=0)
+parser.add_argument('--meal_type', type=str, default="0")
 
 
 args = parser.parse_args()
@@ -128,7 +129,7 @@ args.data_root = ['/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-0
         '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TK_20200709',\
         '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/ZR_20200709',\
         '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TX_20200616',\
-        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/WM_20200709']
+        '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/WM_20200709']  #TK_20200820/WM_20200820
 
 args.data_root_val = ['/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/CX_20200709',\
         '/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-NMA-07/TK_20200709',\
@@ -151,7 +152,7 @@ args.val_data_list = ['/workspace/mnt/storage/yangdecheng/yangdecheng-data1/TR-N
 args.backends = 'mult_prun8_gpu'
 args.feature_dim = 18
 args.batchSize = [args.batch_size,args.batch_size,args.batch_size,args.batch_size,args.batch_size]
-args.ngpu = 1
+args.ngpu = len(args.gpu_id.split(','))
 
 num_tasks = len(args.data_root)
 
@@ -342,11 +343,11 @@ def train(epoch):
         optimizer.zero_grad()
 
         # Get output from student model
-        outputs = student(inputs)
+        outputs, s_loss = student(inputs, targets, slice_idx)
         # Get teacher model
         teacher = teacher_selector(teachers)
         # Get output from teacher model
-        answers = teacher(inputs)
+        answers, t_loss = teacher(inputs, targets, slice_idx)
         # Select output from student and teacher
 
         outputs, answers = output_selector(outputs, answers, eval(args.out_layer))
@@ -357,7 +358,20 @@ def train(epoch):
         
         d_loss = discriminators_criterion(outputs, answers)
         # Get total loss
-        total_loss = loss + d_loss
+        total_t_los = 0
+        for k in range(num_tasks):
+            total_t_los = total_t_los + t_loss[k].mean()
+        
+        total_s_los = 0
+        for k in range(num_tasks):
+            total_s_los = total_s_los + s_loss[k].mean()
+        
+        if args.meal_type == '0':
+            total_loss = loss + d_loss
+        elif args.meal_type == '1':
+            total_loss = loss + d_loss + total_t_los
+        elif args.meal_type == '3':
+            total_loss = loss + d_loss + total_t_los + total_s_los
 
         total_loss.backward()
         optimizer.step()
@@ -411,11 +425,11 @@ def test(epoch):
             inputs, targets = inputs.to(device), targets.to(device)
 
             # Get output from student model
-            outputs = student(inputs)
+            outputs, _ = student(inputs)
             # Get teacher model
             teacher = teacher_selector(teachers)
             # Get output from teacher model
-            answers = teacher(inputs)
+            answers, _ = teacher(inputs)
             # Select output from student and teacher
             outputs, answers = output_selector(outputs, answers, eval(args.out_layer))
             # Calculate loss between student and teacher
@@ -456,7 +470,7 @@ def test(epoch):
             os.mkdir(FILE_PATH)
         save_name = './checkpoint' + '/' + "_".join(args.teachers) + '-generator/ckpt.t7'
         torch.save(state, save_name)
-    if epoch % 4 == 0:
+    if epoch % 1 == 0:
         states = {
                 'epoch': epoch,
                 'state_dict': student.state_dict(),
@@ -465,5 +479,5 @@ def test(epoch):
         torch.save(states, '{}/{}.pth.tar'.format(paths, epoch))
 
 for epoch in range(start_epoch, start_epoch+args.epochs*(len(teachers))):
-    train(epoch)
+    # train(epoch)
     test(epoch)
