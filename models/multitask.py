@@ -43,7 +43,7 @@ class MultiTaskWithLoss(nn.Module):
     def __init__(self, backbone, num_classes, feature_dim, criterion=None):
         super(MultiTaskWithLoss, self).__init__()
         self.basemodel = backbones.__dict__[backbone]()
-        self.criterion = criterion
+        self.criterion = nn.CrossEntropyLoss()
         self.num_tasks = len(num_classes)
         #普通
         self.fcs = nn.ModuleList([nn.Linear(feature_dim, num_classes[k]) for k in range(self.num_tasks)])
@@ -85,6 +85,13 @@ class MultiTaskWithLoss(nn.Module):
         # else:
         feature_maps = []
         feature = self.basemodel(input)
+        out = [self.fcs[k](feature) for k in range(self.num_tasks)]
+
+        x = [self.fcs[k](feature[slice_idx[k]:slice_idx[k+1], ...]) for k in range(self.num_tasks)] 
+        target_slice = [target[slice_idx[k]:slice_idx[k+1]] for k in range(self.num_tasks)]
+        los = [self.criterion(xx, tg) for xx, tg in zip(x, target_slice)]
+
+        return out,los
             # if eval_mode:
             #     #普通
             #     x = [self.fcs[k](feature) for k in range(self.num_tasks)]
@@ -114,7 +121,5 @@ class MultiTaskWithLoss(nn.Module):
     
             #     target_slice = [target[slice_idx[k]:slice_idx[k+1]] for k in range(self.num_tasks)]
             #     return [self.criterion(xx, tg) for xx, tg in zip(x, target_slice)]
-        out = [self.fcs[k](feature) for k in range(self.num_tasks)]
         # out = [out[k].view(out[k].size(0), -1) for k in range(self.num_tasks)]
-        return out
         # return [feature_maps.append(self.layers(out[k].view(out[k].size(0), -1))) for k in range(self.num_tasks)]

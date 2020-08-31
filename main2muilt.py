@@ -67,6 +67,7 @@ parser.add_argument('--weight_decay', type=float, default=1e-4)
 parser.add_argument('--momentum', type=float, default=0.9)
 parser.add_argument('--nesterov', type=bool, default=True)
 parser.add_argument('--lr_min', type=float, default=0)
+parser.add_argument('--meal_type', type=str, default="0")
 
 
 args = parser.parse_args()
@@ -149,7 +150,7 @@ args.val_data_list = ['/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NM
         '/workspace/mnt/storage/yangdecheng/yangdecheng/data/TR-NMA-07/WM_20200709/txt/wm_val.txt']
 
 args.backends = 'mult_prun8_gpu'
-args.feature_dim = 18
+args.feature_dim = 18 #multnas5_gpu: 512
 args.batchSize = [args.batch_size,args.batch_size,args.batch_size,args.batch_size,args.batch_size]
 args.ngpu = 1
 
@@ -342,11 +343,11 @@ def train(epoch):
         optimizer.zero_grad()
 
         # Get output from student model
-        outputs = student(inputs)
+        outputs, s_loss = student(inputs, targets, slice_idx)
         # Get teacher model
         teacher = teacher_selector(teachers)
         # Get output from teacher model
-        answers = teacher(inputs)
+        answers, t_loss = teacher(inputs, targets, slice_idx)
         # Select output from student and teacher
 
         outputs, answers = output_selector(outputs, answers, eval(args.out_layer))
@@ -357,7 +358,21 @@ def train(epoch):
         
         d_loss = discriminators_criterion(outputs, answers)
         # Get total loss
-        total_loss = loss + d_loss
+        import pdb ; pdb.set_trace()
+        total_t_los = 0
+        for k in range(num_tasks):
+            total_t_los = total_t_los + t_loss[k].mean()
+        
+        total_s_los = 0
+        for k in range(num_tasks):
+            total_s_los = total_s_los + s_loss[k].mean()
+        
+        if args.meal_type == '0':
+            total_loss = loss + d_loss
+        elif args.meal_type == '1':
+            total_loss = loss + d_loss + total_t_los
+        elif args.meal_type == '3':
+            total_loss = loss + d_loss + total_t_los + total_s_los
 
         total_loss.backward()
         optimizer.step()
@@ -408,7 +423,7 @@ def test(epoch):
         
         # for batch_idx, (inputs, targets) in enumerate(testloader):
             total += targets.size(0)
-            inputs, targets = inputs.to(device), targets.to(device)
+            # inputs, targets = inputs.to(device), targets.to(device)
 
             # Get output from student model
             outputs = student(inputs)
@@ -456,7 +471,7 @@ def test(epoch):
             os.mkdir(FILE_PATH)
         save_name = './checkpoint' + '/' + "_".join(args.teachers) + '-generator/ckpt.t7'
         torch.save(state, save_name)
-    if epoch % 4 == 0:
+    if epoch % 1 == 0:
         states = {
                 'epoch': epoch,
                 'state_dict': student.state_dict(),
