@@ -57,7 +57,8 @@ class MultiTaskWithLoss(nn.Module):
             x = [self.fcs[k](feature[slice_idx[k]:slice_idx[k+1], ...]) for k in range(self.num_tasks)] 
             target_slice = [target[slice_idx[k]:slice_idx[k+1]] for k in range(self.num_tasks)]
             los = [self.criterion(xx, tg) for xx, tg in zip(x, target_slice)]
+            return out,los
         else:
-            los = 0.0
+            return out
 
-        return out,los
+        # return out,los

@@ -28,6 +28,7 @@ from data.transforms import RandomResizedCrop, Compose, Resize, CenterCrop, ToTe
 from data.datasets import GivenSizeSampler, FileListLabeledDataset, FileListDataset
 from torch.autograd import Variable
 from optimizer import adjust_learning_rate
+import logging
 
 # ================= Arugments ================ #
 
@@ -276,6 +277,8 @@ elif args.loss == "ce":
 
 criterion = betweenLoss(eval(args.gamma), loss=loss)
 
+g_loss = KLLoss()
+
 # ================= Loss Function for Discriminator ================ #
 
 if args.adv:
@@ -341,51 +344,49 @@ def train(epoch):
         total += targets.size(0)
         # inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
-
-        # Get output from student model
-        outputs, s_loss = student(inputs, targets, slice_idx)
-        # Get teacher model
-        teacher = teacher_selector(teachers)
-        # Get output from teacher model
-        answers, t_loss = teacher(inputs, targets, slice_idx)
-        # Select output from student and teacher
-
-        outputs, answers = output_selector(outputs, answers, eval(args.out_layer))
-        # Calculate loss between student and teacher
+#----
+        soft_labels_ = [[torch.unsqueeze(teachers[idx](inputs)[k], dim=2) for idx in range(len(teachers))] for k in range(num_tasks)]
+        soft_labels_softmax = [[F.softmax(i, dim=1) for i in soft_labels_[k]] for k in range(num_tasks)]
+        soft_labels_ = [torch.cat(soft_labels_[k], dim=2).mean(dim=2) for k in range(num_tasks)]
+        soft_labels = [torch.cat(soft_labels_softmax[k], dim=2).mean(dim=2) for k in range(num_tasks)]
         
-        loss = criterion(outputs, answers)
-        # Calculate loss for discriminators
+        s_output = student(inputs)
         
-        d_loss = discriminators_criterion(outputs, answers)
-        # Get total loss
-        total_t_los = 0
+        #Calculate loss
+        g_loss_output = [g_loss((s_output[k], soft_labels[k]), targets) for k in range(num_tasks)]
+        # d_loss_value = [discriminator_loss([s_output[k]], [soft_labels_[k]]) for k in range(num_tasks)]
+        d_loss = discriminators_criterion(s_output, soft_labels_)
+
+        g_loss_k = 0
         for k in range(num_tasks):
-            total_t_los = total_t_los + t_loss[k].mean()
-        
-        total_s_los = 0
-        for k in range(num_tasks):
-            total_s_los = total_s_los + s_loss[k].mean()
-        
-        if args.meal_type == '0':
-            total_loss = loss + d_loss
-        elif args.meal_type == '1':
-            total_loss = loss + d_loss + total_t_los
-        elif args.meal_type == '2':
-            total_loss = loss + d_loss + total_t_los + total_s_los
+            if isinstance(g_loss_output[k], tuple): 
+                g_loss_value_, outputs_ = g_loss_output[k]
+                g_loss_k = g_loss_k +  g_loss_value_
+            else:
+                g_loss_value_ = g_loss_output[k]
+                g_loss_k = g_loss_k +  g_loss_value_
 
+        total_loss = g_loss_k + d_loss
+#----
         total_loss.backward()
         optimizer.step()
 
-        train_loss += loss.item()
+        train_loss += g_loss_k.item()
         discriminator_loss += d_loss.item()
         for k in range(num_tasks):
-            _, predicted = outputs[k].max(1)
+            _, predicted = s_output[k].max(1)
             sl1 = k*args.batch_size
             sl2 = (k+1)*args.batch_size
             correct += predicted[sl1:sl2].eq(targets[sl1:sl2]).sum().item()
-
-        print(batch_idx, len(trainloader), 'Teacher: %s | Lr: %.4e | G_Loss: %.3f | D_Loss: %.3f | Acc: %.3f%% (%d/%d)'
-            % (teacher.__name__, scheduler.get_lr()[0], train_loss / (batch_idx + 1), discriminator_loss / (batch_idx + 1), 100. * correct / total, correct, total))
+        if batch_idx % 20 == 0:
+            print(batch_idx, len(trainloader), 'Teacher: %s | Lr: %.4e | K_Loss: %.3f | D_Loss: %.3f | '
+                % ('teacher', scheduler.get_lr()[0], train_loss / (batch_idx + 1), discriminator_loss / (batch_idx + 1)))
+            # logging.info(
+            #     'Epoch: [{epoch}][{batch}/{epoch_size}] | Lr: {lr:.4e} | K_Loss: {k_loss:.3f} | D_Loss: {d_loss:.3f} | '.format(
+            #         epoch=epoch, batch=batch_idx + 1, epoch_size=len(trainloader), lr=scheduler.get_lr()[0], k_loss=train_loss / (batch_idx + 1), 
+            #         d_loss=discriminator_loss / (batch_idx + 1)
+            #     )
+            # )
 
 
 def test(epoch):
@@ -461,21 +462,21 @@ def test(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        FILE_PATH = './checkpoint' + '/' + "_".join(args.teachers) + '-generator'
+        FILE_PATH = './checkpoint' + '/' + "_".join(args.teachers) + '_meal_v2-generator'
         if os.path.isdir(FILE_PATH):
             # print 'dir exists'generator
             pass
         else:
             # print 'dir not exists'
             os.mkdir(FILE_PATH)
-        save_name = './checkpoint' + '/' + "_".join(args.teachers) + '-generator/ckpt.t7'
+        save_name = './checkpoint' + '/' + "_".join(args.teachers) + '_meal_v2-generator/ckpt.t7'
         torch.save(state, save_name)
     if epoch % 1 == 0:
         states = {
                 'epoch': epoch,
                 'state_dict': student.state_dict(),
             }
-        paths = './checkpoint' + '/' + "_".join(args.teachers) + '-generator/'
+        paths = './checkpoint' + '/' + "_".join(args.teachers) + '_meal_v2-generator/'
         torch.save(states, '{}/{}.pth.tar'.format(paths, epoch))
 
 for epoch in range(start_epoch, start_epoch+args.epochs*(len(teachers))):

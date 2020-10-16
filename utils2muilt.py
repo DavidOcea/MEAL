@@ -136,7 +136,7 @@ def get_model(args, config, device):
                  "resnext": ResNeXt29_2x64d, "mobilenet": MobileNet, "dpn92": DPN92, "mul_mult_prun8_gpu":'mult_prun8_gpu',
                  "mul_mult_prun8_gpu_prun":'mult_prun8_gpu_prun','mul_multnas5_gpu':'multnas5_gpu',
                  'mul_multnas5_gpu_prun':'multnas5_gpu_prun','mul_multnas5_gpu_2_18':'multnas5_gpu_2_18',
-                 'mul_se_resnext101_32x4d':'se_resnext101_32x4d'}
+                 'mul_se_resnext101_32x4d':'se_resnext101_32x4d','mul_se_resnet50_18':'se_resnet50_18'}
 
     # Add teachers models into teacher model list
     for t in args.teachers:
@@ -171,7 +171,7 @@ def get_model(args, config, device):
 
     for i, teacher in enumerate(teachers):
         for p in teacher.parameters():
-            p.requires_grad = False
+            p.requires_grad = False #False
         teacher = teacher.to(device)
         if device == "cuda":
             teachers[i] = torch.nn.DataParallel(teacher)
@@ -185,9 +185,11 @@ def get_model(args, config, device):
             elif teacher.__name__ == 'mul_multnas5_gpu':
                 checkpoint = torch.load('./pretrain_models/0710ckpt_epoch_38.pth.tar')
             elif teacher.__name__ == 'mul_multnas5_gpu_2_18':
-                checkpoint = torch.load('./pretrain_models/0719ckpt_epoch_45.pth.tar')
+                checkpoint = torch.load('./pretrain_models/multnas5_gpu_18_1009_28.pth.tar')
             elif teacher.__name__ == 'mul_se_resnext101_32x4d':
                 checkpoint = torch.load('./pretrain_models/0805_se_res101_51.pth.tar')
+            elif teacher.__name__ == 'mul_se_resnet50_18':
+                checkpoint = torch.load('./pretrain_models/se_resnet1010_11.pth.tar')
             #原生的
             # model_dict = teacher.state_dict()
             # pretrained_dict = {k: v for k, v in checkpoint.items() if k in model_dict}
